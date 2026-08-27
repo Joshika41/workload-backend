@@ -5,7 +5,6 @@ from database import SessionLocal, Faculty, User, RoleEnum as Role
 from auth import get_password_hash
 
 def generate_username(name):
-    # E.g. "Dr. R. Anandan" -> "ranandan"
     clean = name.replace('Dr. ', '').replace('Prof. ', '').replace('Mr. ', '').replace('Ms. ', '').strip()
     parts = clean.split()
     if len(parts) >= 2:
@@ -16,13 +15,7 @@ def run_seed():
     db = SessionLocal()
     try:
         print("Generating credentials for real faculty...")
-        
-        # Read real faculty from DB
         faculties = db.query(Faculty).all()
-        
-        print("\n--- GENERATED CREDENTIALS ---")
-        print(f"{'Name':<25} | {'Username':<15} | {'Password':<15}")
-        print("-" * 60)
         
         count = 0
         seen_usernames = set()
@@ -35,7 +28,6 @@ def run_seed():
                 suffix += 1
             seen_usernames.add(username)
             
-            # Check if user exists
             existing = db.query(User).filter(User.username == username).first()
             if not existing:
                 db.add(User(
@@ -45,13 +37,17 @@ def run_seed():
                     faculty_id=fac.id
                 ))
                 count += 1
-                print(f"{fac.name:<25} | {username:<15} | {'password123':<15}")
-            else:
-                print(f"{fac.name:<25} | {username:<15} | (Already Exists)")
                 
+        # --- NEW CODE: Create Admin and Dean Users ---
+        print("\nSeeding admin and dean users...")
+        for default_user in [("admin", Role.ADMIN), ("dean", Role.DEAN)]:
+            username, role = default_user
+            if not db.query(User).filter(User.username == username).first():
+                db.add(User(username=username, password_hash=get_password_hash("password123"), role=role))
+                print(f"Created {username} user")
+
         db.commit()
-        print("-" * 60)
-        print(f"Success: {count} User accounts successfully generated!")
+        print(f"Success: {count} Faculty accounts and Admin/Dean successfully generated!")
         
     except Exception as e:
         print(f"Error seeding users: {e}")
@@ -61,3 +57,4 @@ def run_seed():
 
 if __name__ == "__main__":
     run_seed()
+
