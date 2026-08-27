@@ -21,6 +21,8 @@ if __name__ == '__main__':
             os.remove(db_file)
         except Exception as e:
             print(f"Warning: Could not delete database: {e}")
+    else:
+        print("No database found, starting fresh!")
 
     # --- CRITICAL FIX: Recreate the tables so the seed scripts can use them! ---
     try:
@@ -30,16 +32,10 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Error creating tables: {e}")
         sys.exit(1)
-    
+        
     scripts_to_run = ['seed_faculty.py', 'seed_users.py']
     
     for script in scripts_to_run:
-        if os.path.exists(script):
-            run_script(script)
-        else:
-            print(f'Warning: {script} not found!')
-            
-    print('Database seeding complete!')
-und!')
-            
+        run_script(script)
+        
     print('Database seeding complete!')
