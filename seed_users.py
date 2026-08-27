@@ -18,7 +18,7 @@ def run_seed():
         
         # This is the exact pre-calculated security hash for "password123"
         # Using this directly completely bypasses the cloud library bug!
-        hardcoded_hash = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjIQqiRQYq"
+        hardcoded_hash = "$2b$12$uxFrTo/ZvbrnfxCuLim0guX4pBy7rfez6dhKFWFikOGaz1ZIs.QMO"
         
         count = 0
         seen_usernames = set()
