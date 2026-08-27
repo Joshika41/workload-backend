@@ -19,7 +19,7 @@ app = FastAPI(title="University Timetable Admin API")
 # --- CORS Middleware Configuration ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins, adjust in production if necessary
+    allow_origins=["https://workload-frontend-josh-iota.vercel.app", "http://localhost:5173", "http://localhost:8080"],  # Allows all origins, adjust in production if necessary
     allow_credentials=True,
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
