@@ -108,3 +108,32 @@ async def upload_faculty_list(file: UploadFile = File(...), db: Session = Depend
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/api/upload/rooms")
+async def upload_rooms(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+        
+        rooms_to_insert = []
+        for _, row in df.iterrows():
+            room_number = row.get('Room Number')
+            is_lab = row.get('Is Lab')
+            capacity = row.get('Capacity')
+            
+            if pd.isna(room_number):
+                continue
+                
+            room = models.Room(
+                number=str(room_number).strip(),
+                is_lab=bool(is_lab) if pd.notna(is_lab) else False,
+                capacity=int(capacity) if pd.notna(capacity) else 60
+            )
+            rooms_to_insert.append(room)
+            
+        db.add_all(rooms_to_insert)
+        db.commit()
+        return {"message": f"Successfully ingested {len(rooms_to_insert)} rooms"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))

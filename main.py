@@ -20,6 +20,7 @@ from database import engine
 from routers.ingestion import router as ingestion_router
 from routers.generation import router as generation_router
 from routers.workload import router as workload_router
+from routers.preferences import router as preferences_router
 
 app = FastAPI(title="University Timetable Admin API")
 
@@ -27,6 +28,7 @@ models.Base.metadata.create_all(bind=engine)
 app.include_router(ingestion_router)
 app.include_router(generation_router)
 app.include_router(workload_router)
+app.include_router(preferences_router)
 
 
 # --- CORS Middleware Configuration ---

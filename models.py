@@ -95,3 +95,17 @@ class TimeSlot(Base):
     is_break = Column(Boolean, default=False)
     
     department = relationship("Department")
+
+class PreferenceTypeEnum(str, enum.Enum):
+    AVOID = "AVOID"
+    PREFER = "PREFER"
+
+class FacultyPreference(Base):
+    __tablename__ = 'faculty_preferences'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    faculty_id = Column(Integer, ForeignKey('faculty.id'), nullable=False)
+    preferred_day = Column(String, nullable=False)
+    preferred_period = Column(Integer, nullable=False)
+    preference_type = Column(Enum(PreferenceTypeEnum), nullable=False)
+    
+    faculty = relationship("Faculty")

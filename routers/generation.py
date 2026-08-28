@@ -181,7 +181,26 @@ def generate_timetables(db: Session = Depends(get_db)):
                 penalties.append(is_theory[alloc.id][d][first_p][r.id])
                 penalties.append(is_theory[alloc.id][d][last_p][r.id])
                 
+    
+    # Faculty Preferences Soft Constraint (AVOID)
+    preferences = db.query(models.FacultyPreference).all()
+    for pref in preferences:
+        cat_val = pref.preference_type.value if hasattr(pref.preference_type, 'value') else pref.preference_type
+        if cat_val == "AVOID":
+            d_pref = pref.preferred_day
+            try:
+                p_pref = int(pref.preferred_period)
+            except ValueError:
+                continue
+                
+            if d_pref in days and p_pref in periods:
+                for alloc in allocations:
+                    if alloc.faculty_id == pref.faculty_id:
+                        for r in rooms:
+                            penalties.append(assignments[alloc.id][d_pref][p_pref][r.id] * 10) # 10x penalty weight for AVOID
+
     model.Minimize(sum(penalties))
+
                         
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 15.0
