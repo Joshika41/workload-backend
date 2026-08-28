@@ -1,3 +1,7 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import io
 import pandas as pd
 import sqlite3
@@ -23,6 +27,7 @@ from routers.workload import router as workload_router
 from routers.preferences import router as preferences_router
 from routers.auth import router as auth_router
 from routers.management import router as management_router
+from routers.export import router as export_router
 
 app = FastAPI(title="University Timetable Admin API")
 
@@ -33,6 +38,7 @@ app.include_router(workload_router)
 app.include_router(preferences_router)
 app.include_router(auth_router)
 app.include_router(management_router)
+app.include_router(export_router)
 
 
 # --- CORS Middleware Configuration ---

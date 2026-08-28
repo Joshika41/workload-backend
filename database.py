@@ -4,9 +4,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # SMART MOVE: Switch this line to your postgres:// URL during deployment!
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./university_timetable.db")
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

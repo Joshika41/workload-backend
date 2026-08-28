@@ -109,3 +109,14 @@ class FacultyPreference(Base):
     preference_type = Column(Enum(PreferenceTypeEnum), nullable=False)
     
     faculty = relationship("Faculty")
+
+class GeneratedTimetable(Base):
+    __tablename__ = 'generated_timetables'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    allocation_id = Column(Integer, ForeignKey('workload_allocations.id'), nullable=False)
+    day = Column(String, nullable=False)
+    period = Column(Integer, nullable=False)
+    room_id = Column(Integer, ForeignKey('rooms.id'), nullable=False)
+    
+    allocation = relationship("WorkloadAllocation")
+    room = relationship("Room")

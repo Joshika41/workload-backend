@@ -208,6 +208,23 @@ def generate_timetables(db: Session = Depends(get_db), current_user: models.User
     status = solver.Solve(model)
     
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        return {"message": "Timetable successfully generated", "status": "optimal" if status == cp_model.OPTIMAL else "feasible"}
+        db.query(models.GeneratedTimetable).delete() # Clear old schedule
+        
+        schedule_inserts = []
+        for alloc in allocations:
+            for d in days:
+                for p in periods:
+                    for r in rooms:
+                        if solver.Value(assignments[alloc.id][d][p][r.id]) == 1:
+                            schedule_inserts.append(models.GeneratedTimetable(
+                                allocation_id=alloc.id,
+                                day=str(d),
+                                period=int(p),
+                                room_id=r.id
+                            ))
+                            
+        db.add_all(schedule_inserts)
+        db.commit()
+        return {"message": "Timetable successfully generated and saved to database", "status": "optimal" if status == cp_model.OPTIMAL else "feasible"}
     else:
         raise HTTPException(status_code=400, detail="Schedule mathematically impossible. Please adjust faculty hours, room constraints, or preferences.")
