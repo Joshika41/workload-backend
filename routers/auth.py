@@ -82,3 +82,45 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         data={"sub": str(user.id), "role": user.role.value if hasattr(user.role, 'value') else user.role}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+from typing import Optional
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+    role: str
+    faculty_id: Optional[int] = None
+
+@router.post("/api/auth/create-user")
+def create_user(request: CreateUserRequest, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    if current_user.role.value != "MASTER_ADMIN":
+        raise HTTPException(status_code=403, detail="Only Master Admin can create users.")
+        
+    existing = db.query(models.User).filter(models.User.email == request.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+        
+    hashed_pw = get_password_hash(request.password)
+    
+    role_enum = models.RoleEnum.FACULTY
+    if request.role == "DEAN":
+        role_enum = models.RoleEnum.DEAN
+    elif request.role == "MASTER_ADMIN":
+        role_enum = models.RoleEnum.MASTER_ADMIN
+        
+    new_user = models.User(
+        email=request.email,
+        hashed_password=hashed_pw,
+        role=role_enum
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    if request.role == "FACULTY" and request.faculty_id:
+        faculty_record = db.query(models.Faculty).filter(models.Faculty.id == request.faculty_id).first()
+        if faculty_record:
+            faculty_record.user_id = new_user.id
+            db.commit()
+            
+    return {"message": "User created successfully", "user_id": new_user.id}
