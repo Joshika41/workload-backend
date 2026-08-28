@@ -15,7 +15,15 @@ from datetime import timedelta
 from solver import solve_timetable
 from data_parser import parse_seed_data
 
+import models
+from database import engine
+from routers.ingestion import router as ingestion_router
+
 app = FastAPI(title="University Timetable Admin API")
+
+models.Base.metadata.create_all(bind=engine)
+app.include_router(ingestion_router)
+
 
 # --- CORS Middleware Configuration ---
 app.add_middleware(
