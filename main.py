@@ -18,11 +18,13 @@ from data_parser import parse_seed_data
 import models
 from database import engine
 from routers.ingestion import router as ingestion_router
+from routers.generation import router as generation_router
 
 app = FastAPI(title="University Timetable Admin API")
 
 models.Base.metadata.create_all(bind=engine)
 app.include_router(ingestion_router)
+app.include_router(generation_router)
 
 
 # --- CORS Middleware Configuration ---
