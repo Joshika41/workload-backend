@@ -22,6 +22,7 @@ from routers.generation import router as generation_router
 from routers.workload import router as workload_router
 from routers.preferences import router as preferences_router
 from routers.auth import router as auth_router
+from routers.management import router as management_router
 
 app = FastAPI(title="University Timetable Admin API")
 
@@ -31,6 +32,7 @@ app.include_router(generation_router)
 app.include_router(workload_router)
 app.include_router(preferences_router)
 app.include_router(auth_router)
+app.include_router(management_router)
 
 
 # --- CORS Middleware Configuration ---

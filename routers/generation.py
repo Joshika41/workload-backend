@@ -210,4 +210,4 @@ def generate_timetables(db: Session = Depends(get_db), current_user: models.User
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         return {"message": "Timetable successfully generated", "status": "optimal" if status == cp_model.OPTIMAL else "feasible"}
     else:
-        raise HTTPException(status_code=400, detail="Infeasible: No valid timetable could be generated with these constraints.")
+        raise HTTPException(status_code=400, detail="Schedule mathematically impossible. Please adjust faculty hours, room constraints, or preferences.")
