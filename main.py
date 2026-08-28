@@ -4,6 +4,7 @@ import sqlite3
 import jwt
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form, status
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import List, Optional
@@ -19,7 +20,7 @@ app = FastAPI(title="University Timetable Admin API")
 # --- CORS Middleware Configuration ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://workload-frontend-josh-iota.vercel.app", "http://localhost:5173", "http://localhost:8080"],  # Allows all origins, adjust in production if necessary
+    allow_origins=["*"],  # Allows all origins, adjust in production if necessary
     allow_credentials=True,
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
@@ -347,7 +348,7 @@ def generate_workload(configs: List[FacultyWorkloadConfig], db: Session = Depend
         raise HTTPException(status_code=400, detail=f"Failed to generate workload: {str(e)}")
 
 @app.post("/api/admin/generate-test")
-def generate_test_timetable(current_user: User = Depends(get_current_user)):
+async def generate_test_timetable(current_user: User = Depends(get_current_user)):
     if current_user.role.value != "ADMIN":
         raise HTTPException(status_code=403, detail="Only admins can generate timetables.")
         
@@ -358,11 +359,11 @@ def generate_test_timetable(current_user: User = Depends(get_current_user)):
     ]
     mock_classes = ['A']
     
-    result = solve_timetable(mock_workload, mock_classes)
+    result = await run_in_threadpool(solve_timetable, mock_workload, mock_classes)
     return result
 
 @app.post("/api/admin/generate-batch")
-def generate_batch(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def generate_batch(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role.value != "ADMIN":
         raise HTTPException(status_code=403, detail="Only admins can run batch generation.")
         
@@ -386,7 +387,7 @@ def generate_batch(current_user: User = Depends(get_current_user), db: Session =
         })
         classes.add(req.section)
         
-    result = solve_timetable(workload_data, list(classes), rooms)
+    result = await run_in_threadpool(solve_timetable, workload_data, list(classes), rooms)
     
     if result['status'] in ['OPTIMAL', 'FEASIBLE']:
         db.query(TimetableBlock).delete()
