@@ -83,3 +83,15 @@ class WorkloadAllocation(Base):
 
     faculty = relationship("Faculty", back_populates="allocations")
     subject = relationship("Subject", back_populates="allocations")
+
+class TimeSlot(Base):
+    __tablename__ = 'time_slots'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    department_id = Column(Integer, ForeignKey('departments.id'), nullable=False)
+    day_of_week = Column(String, nullable=False)
+    period_number = Column(Integer, nullable=False)
+    start_time = Column(String, nullable=False)
+    end_time = Column(String, nullable=False)
+    is_break = Column(Boolean, default=False)
+    
+    department = relationship("Department")
