@@ -8,7 +8,10 @@ import os
 # SMART MOVE: Switch this line to your postgres:// URL during deployment!
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./university_timetable.db")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
