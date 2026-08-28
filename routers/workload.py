@@ -4,6 +4,7 @@ from sqlalchemy import func
 from pydantic import BaseModel
 import models
 from database import SessionLocal
+from routers.auth import get_current_user
 
 router = APIRouter()
 
@@ -22,7 +23,7 @@ class AllocationRequest(BaseModel):
     practical_hours: float
 
 @router.post("/api/workload/allocate")
-def allocate_workload(allocation: AllocationRequest, db: Session = Depends(get_db)):
+def allocate_workload(allocation: AllocationRequest, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == allocation.faculty_id).first()
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
@@ -44,7 +45,7 @@ def allocate_workload(allocation: AllocationRequest, db: Session = Depends(get_d
     return {"message": "Allocation successfully created", "id": new_alloc.id}
 
 @router.get("/api/workload/summary")
-def workload_summary(db: Session = Depends(get_db)):
+def workload_summary(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     faculties = db.query(models.Faculty).all()
     summary = []
     

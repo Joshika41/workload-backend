@@ -4,6 +4,7 @@ import pandas as pd
 import io
 import models
 from database import SessionLocal
+from routers.auth import get_current_user
 
 router = APIRouter()
 
@@ -15,7 +16,7 @@ def get_db():
         db.close()
 
 @router.post("/api/upload/syllabus")
-async def upload_syllabus(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_syllabus(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     try:
         contents = await file.read()
         df = pd.read_excel(io.BytesIO(contents), sheet_name='CD FORMAT ', skiprows=3)
@@ -61,7 +62,7 @@ async def upload_syllabus(file: UploadFile = File(...), db: Session = Depends(ge
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/api/upload/faculty_list")
-async def upload_faculty_list(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_faculty_list(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     try:
         contents = await file.read()
         # Assumes the first sheet is the faculty list if sheet_name not specified, or just reads it
@@ -110,7 +111,7 @@ async def upload_faculty_list(file: UploadFile = File(...), db: Session = Depend
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/api/upload/rooms")
-async def upload_rooms(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_rooms(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     try:
         contents = await file.read()
         df = pd.read_excel(io.BytesIO(contents))

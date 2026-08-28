@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from ortools.sat.python import cp_model
 import models
 from database import SessionLocal
+from routers.auth import get_current_user
 
 router = APIRouter()
 
@@ -14,7 +15,7 @@ def get_db():
         db.close()
 
 @router.post("/api/generate/timetables")
-def generate_timetables(db: Session = Depends(get_db)):
+def generate_timetables(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     allocations = db.query(models.WorkloadAllocation).join(models.Faculty).join(models.Subject).all()
     rooms = db.query(models.Room).all()
     time_slots = db.query(models.TimeSlot).all()
