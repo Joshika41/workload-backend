@@ -89,6 +89,9 @@ def run_solver_task(task_id: str):
                             
         for alloc in allocations:
             for d in days:
+                # STRICT 2-HOUR SUBJECT LAB CAP PER DAY
+                model.Add(sum(is_practical[alloc.id][d][p][r.id] for p in periods for r in rooms) <= 2)
+                
                 for p_idx, p in enumerate(periods):
                     for r in rooms:
                         prev_start = prac_starts[alloc.id][d][periods[p_idx-1]][r.id] if p_idx > 0 else 0
@@ -103,6 +106,11 @@ def run_solver_task(task_id: str):
                 total_prac_starts = sum(prac_starts[alloc.id][d][p][r.id] for d in days for p in periods for r in rooms)
                 model.Add(total_prac_starts == practical_hrs // 2)
 
+
+        assumptions = []
+        assumption_map = {}
+
+        # 1. Faculty Double Booking
         faculty_allocs = {}
         for alloc in allocations:
             if alloc.faculty_id not in faculty_allocs:
@@ -112,11 +120,19 @@ def run_solver_task(task_id: str):
         for fac_id, alloc_ids in faculty_allocs.items():
             for d in days:
                 for p in periods:
-                    model.Add(sum(assignments[a_id][d][p][r.id] for a_id in alloc_ids for r in rooms) <= 1)
+                    ind = model.NewBoolVar(f'fac_db_{fac_id}_{d}_{p}')
+                    model.Add(sum(assignments[a_id][d][p][r.id] for a_id in alloc_ids for r in rooms) <= 1).OnlyEnforceIf(ind)
+                    assumptions.append(ind)
+                    assumption_map[ind.Index()] = f"Conflict: Faculty {fac_id} double-booked on Day {d}, Period {p}"
                     
+            # Faculty Free Slot Constraint (Hard)
             total_assignments = sum(assignments[a_id][d][p][r.id] for a_id in alloc_ids for d in days for p in periods for r in rooms)
-            model.Add(total_assignments <= (num_days * num_periods) - 1)
+            ind_fs = model.NewBoolVar(f'fac_fs_{fac_id}')
+            model.Add(total_assignments <= (num_days * num_periods) - 1).OnlyEnforceIf(ind_fs)
+            assumptions.append(ind_fs)
+            assumption_map[ind_fs.Index()] = f"Conflict: Faculty {fac_id} exhausted all teaching slots (no free slot left)"
                     
+        # 2. Section Overbooking
         section_allocs = {}
         for alloc in allocations:
             if alloc.class_section not in section_allocs:
@@ -126,13 +142,21 @@ def run_solver_task(task_id: str):
         for sec, alloc_ids in section_allocs.items():
             for d in days:
                 for p in periods:
-                    model.Add(sum(assignments[a_id][d][p][r.id] for a_id in alloc_ids for r in rooms) <= 1)
+                    ind = model.NewBoolVar(f'sec_ob_{sec}_{d}_{p}')
+                    model.Add(sum(assignments[a_id][d][p][r.id] for a_id in alloc_ids for r in rooms) <= 1).OnlyEnforceIf(ind)
+                    assumptions.append(ind)
+                    assumption_map[ind.Index()] = f"Conflict: Section {sec} double-booked on Day {d}, Period {p}"
                     
+        # 3. Room Capacity (Room Double Booking)
         for d in days:
             for p in periods:
                 for r in rooms:
-                    model.Add(sum(assignments[alloc.id][d][p][r.id] for alloc in allocations) <= 1)
+                    ind = model.NewBoolVar(f'room_cap_{d}_{p}_{r.id}')
+                    model.Add(sum(assignments[alloc.id][d][p][r.id] for alloc in allocations) <= 1).OnlyEnforceIf(ind)
+                    assumptions.append(ind)
+                    assumption_map[ind.Index()] = f"Conflict: Room {r.id} capacity exceeded (double-booked) on Day {d}, Period {p}"
                     
+        # Theory constraints
         for alloc in allocations:
             total_required_theory = int(alloc.theory_hours)
             model.Add(sum(is_theory[alloc.id][d][p][r.id] 
@@ -176,23 +200,29 @@ def run_solver_task(task_id: str):
                     penalties.append(is_theory[alloc.id][d][first_p][r.id])
                     penalties.append(is_theory[alloc.id][d][last_p][r.id])
                     
+        # Weighted PREFER and AVOID Preferences
         preferences = db.query(models.FacultyPreference).all()
         for pref in preferences:
             cat_val = pref.preference_type.value if hasattr(pref.preference_type, 'value') else pref.preference_type
-            if cat_val == "AVOID":
-                d_pref = pref.preferred_day
-                try:
-                    p_pref = int(pref.preferred_period)
-                except ValueError:
-                    continue
-                    
-                if d_pref in days and p_pref in periods:
-                    for alloc in allocations:
-                        if alloc.faculty_id == pref.faculty_id:
-                            for r in rooms:
+            d_pref = pref.preferred_day
+            try:
+                p_pref = int(pref.preferred_period)
+            except ValueError:
+                continue
+                
+            if d_pref in days and p_pref in periods:
+                for alloc in allocations:
+                    if alloc.faculty_id == pref.faculty_id:
+                        for r in rooms:
+                            if cat_val == "AVOID":
                                 penalties.append(assignments[alloc.id][d_pref][p_pref][r.id] * 10) 
+                            elif cat_val == "PREFER":
+                                penalties.append(assignments[alloc.id][d_pref][p_pref][r.id] * -5)
 
         model.Minimize(sum(penalties))
+        
+        # Inject assumptions for Infeasibility Engine
+        model.AddAssumptions(assumptions)
 
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = 15.0
@@ -219,8 +249,21 @@ def run_solver_task(task_id: str):
             task.status = "COMPLETED"
             task.result_payload = {"message": "Timetable successfully generated and saved to database", "status": "optimal" if status == cp_model.OPTIMAL else "feasible"}
         else:
+            if status == cp_model.INFEASIBLE:
+                failed_inds = solver.SufficientAssumptionsForInfeasibility()
+                reasons = []
+                for idx in failed_inds:
+                    if idx in assumption_map:
+                        reasons.append(assumption_map[idx])
+                if reasons:
+                    error_msg = reasons[0]
+                else:
+                    error_msg = "Schedule mathematically impossible. Try adjusting theory/lab hours or section constraints."
+            else:
+                error_msg = "Solver timed out or failed. Matrix is too complex."
+                
             task.status = "FAILED"
-            task.result_payload = {"detail": "Schedule mathematically impossible. Please adjust faculty hours, room constraints, or preferences."}
+            task.result_payload = {"detail": error_msg}
         db.commit()
     except Exception as e:
         db.rollback()
