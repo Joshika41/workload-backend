@@ -22,6 +22,12 @@ else:
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
+class Department(Base):
+    __tablename__ = "departments"
+    name = Column(String, primary_key=True, index=True)
+    has_labs = Column(Boolean, default=True)
+
 class RoleEnum(str, enum.Enum):
     ADMIN = "ADMIN"
     FACULTY = "FACULTY"

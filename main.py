@@ -31,6 +31,31 @@ from routers.export import router as export_router
 
 app = FastAPI(title="University Timetable Admin API")
 
+from database import Department
+from pydantic import BaseModel
+
+class DepartmentUpdate(BaseModel):
+    has_labs: bool
+
+@app.get("/api/admin/departments")
+def get_departments(db: Session = Depends(get_db)):
+    depts = db.query(Department).all()
+    return {d.name: d.has_labs for d in depts}
+
+@app.put("/api/admin/departments/{name}")
+def update_department(name: str, payload: DepartmentUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role.value not in ["ADMIN", "MASTER_ADMIN"]:
+        raise HTTPException(status_code=403, detail="Only admins can modify department settings.")
+    dept = db.query(Department).filter(Department.name == name).first()
+    if not dept:
+        dept = Department(name=name, has_labs=payload.has_labs)
+        db.add(dept)
+    else:
+        dept.has_labs = payload.has_labs
+    db.commit()
+    return {"message": "Updated successfully", "has_labs": dept.has_labs}
+
+
 @app.on_event("startup")
 def clean_zombie_tasks():
     from database import GenerationTask, SessionLocal
@@ -291,6 +316,11 @@ def generate_workload(configs: List[FacultyWorkloadConfig], db: Session = Depend
     results = []
     try:
         for config in configs:
+            
+            department_obj = db.query(Department).filter(Department.name == config.department).first()
+            if department_obj and not department_obj.has_labs:
+                config.lab_hours = 0
+
             total_calculated = config.theory_hours + config.lab_hours + config.incharge_hours
             is_overloaded = total_calculated > config.max_hours_limit
             
@@ -685,6 +715,12 @@ async def upload_metadata(
                         existing.department = valid_data.department
                     else:
                         db.add(Faculty(id=valid_data.faculty_id, name=valid_data.name, department=valid_data.department))
+
+                    dept = db.query(Department).filter(Department.name == valid_data.department).first()
+                    if not dept:
+                        db.add(Department(name=valid_data.department))
+                        db.commit()
+
                         
                     faculty_list.append({
                         "faculty_id": valid_data.faculty_id,

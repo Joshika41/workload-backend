@@ -32,6 +32,11 @@ def allocate_workload(allocation: AllocationRequest, db: Session = Depends(get_d
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
         
+    
+    department_obj = db.query(models.Department).filter(models.Department.name == faculty.department).first()
+    if department_obj and not department_obj.has_labs:
+        allocation.practical_hours = 0
+
     new_alloc = models.WorkloadAllocation(
         faculty_id=allocation.faculty_id,
         subject_id=allocation.subject_id,
