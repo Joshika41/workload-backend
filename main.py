@@ -31,6 +31,28 @@ from routers.export import router as export_router
 
 app = FastAPI(title="University Timetable Admin API")
 
+@app.on_event("startup")
+def clean_zombie_tasks():
+    from database import GenerationTask, SessionLocal
+    from datetime import datetime, timedelta
+    db = SessionLocal()
+    try:
+        ten_mins_ago = datetime.utcnow() - timedelta(minutes=10)
+        zombie_tasks = db.query(GenerationTask).filter(
+            GenerationTask.status == "PROCESSING",
+            GenerationTask.created_at < ten_mins_ago
+        ).all()
+        for task in zombie_tasks:
+            task.status = "FAILED"
+            task.result_payload = {"detail": "Server Restart / Timeout"}
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print("Failed to clean zombie tasks:", str(e))
+    finally:
+        db.close()
+
+
 models.Base.metadata.create_all(bind=engine)
 app.include_router(ingestion_router)
 app.include_router(generation_router)
@@ -602,7 +624,7 @@ async def upload_metadata(
                         msg = ve.errors()[0]['msg']
                         raise ValueError(f"Validation failed on Syllabus sheet at Row {idx + 2}, Column '{field}': {msg}")
                         
-                    existing = db.query(Syllabus).filter_by(course_code=valid_data.course_code).first()
+                    existing = db.query(Syllabus).filter_by(course_code=valid_data.course_code).with_for_update().first()
                     if existing:
                         existing.course_title = valid_data.course_title
                         existing.course_type = valid_data.course_type
@@ -621,7 +643,7 @@ async def upload_metadata(
                         msg = ve.errors()[0]['msg']
                         raise ValueError(f"Validation failed on Rooms sheet at Row {idx + 2}, Column '{field}': {msg}")
                         
-                    existing = db.query(Room).filter_by(room_number=valid_data.room_number).first()
+                    existing = db.query(Room).filter_by(room_number=valid_data.room_number).with_for_update().first()
                     if existing:
                         existing.room_type = valid_data.room_type
                         existing.capacity = valid_data.capacity
@@ -639,7 +661,7 @@ async def upload_metadata(
                         msg = ve.errors()[0]['msg']
                         raise ValueError(f"Validation failed on Total Hours sheet at Row {idx + 2}, Column '{field}': {msg}")
                         
-                    existing = db.query(WorkloadConfiguration).filter_by(faculty_id=valid_data.faculty_id).first()
+                    existing = db.query(WorkloadConfiguration).filter_by(faculty_id=valid_data.faculty_id).with_for_update().first()
                     if existing:
                         existing.max_hours_limit = valid_data.max_hours_limit
                     else:
@@ -657,7 +679,7 @@ async def upload_metadata(
                         msg = ve.errors()[0]['msg']
                         raise ValueError(f"Validation failed on Faculty sheet at Row {idx + 2}, Column '{field}': {msg}")
                         
-                    existing = db.query(Faculty).filter_by(id=valid_data.faculty_id).first()
+                    existing = db.query(Faculty).filter_by(id=valid_data.faculty_id).with_for_update().first()
                     if existing:
                         existing.name = valid_data.name
                         existing.department = valid_data.department
