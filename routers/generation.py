@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from database import SessionLocal, GenerationTask
 import models
-from routers.auth import get_current_user
+from routers.auth import get_current_user, verify_admin_role
 from ortools.sat.python import cp_model
 import json
 
@@ -274,7 +274,7 @@ def run_solver_task(task_id: str):
         db.close()
 
 @router.post("/api/generate/timetables", status_code=202)
-async def generate_timetables(background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+async def generate_timetables(background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: models.User = Depends(verify_admin_role)):
     task = GenerationTask(status="PENDING")
     db.add(task)
     db.commit()
@@ -284,7 +284,7 @@ async def generate_timetables(background_tasks: BackgroundTasks, db: Session = D
     return {"task_id": task.id, "status": "PENDING"}
 
 @router.get("/api/generate/status/{task_id}")
-async def get_generation_status(task_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+async def get_generation_status(task_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(verify_admin_role)):
     task = db.query(GenerationTask).filter(GenerationTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")

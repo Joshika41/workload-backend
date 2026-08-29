@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List
 import models
 from database import SessionLocal
-from routers.auth import get_current_user
+from routers.auth import get_current_user, verify_admin_role
 
 router = APIRouter()
 
@@ -47,7 +47,7 @@ def submit_preferences(prefs: List[PreferenceRequest], db: Session = Depends(get
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/api/admin/preferences")
-def get_all_preferences(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def get_all_preferences(db: Session = Depends(get_db), current_user: models.User = Depends(verify_admin_role)):
     prefs = db.query(models.FacultyPreference).join(models.Faculty).all()
     
     result = []
