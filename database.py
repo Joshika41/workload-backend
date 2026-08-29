@@ -1,3 +1,8 @@
+
+import uuid
+from datetime import datetime
+from sqlalchemy import JSON, DateTime
+
 import enum
 from sqlalchemy import create_engine, Column, String, Integer, ForeignKey, Boolean, Enum
 from sqlalchemy.ext.declarative import declarative_base
@@ -83,4 +88,12 @@ class TimetableBlock(Base):
     period = Column(Integer, nullable=False)
 
 # Create the tables automatically in SQLite
+
+class GenerationTask(Base):
+    __tablename__ = "generation_tasks"
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    status = Column(String, default="PENDING")
+    result_payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 Base.metadata.create_all(bind=engine)
