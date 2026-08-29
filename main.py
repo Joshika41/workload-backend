@@ -525,14 +525,33 @@ def get_faculty_timetable(current_user: User = Depends(get_current_user), db: Se
         "class_schedules": class_schedules
     }
 
+
+from pydantic import BaseModel, Field, ValidationError
+
+class SyllabusRow(BaseModel):
+    course_code: str
+    course_title: Optional[str] = ""
+    course_type: Optional[str] = ""
+    category: Optional[str] = ""
+
+class RoomRow(BaseModel):
+    room_number: str
+    room_type: Optional[str] = ""
+    capacity: Optional[int] = 0
+
+class WorkloadConfigRow(BaseModel):
+    faculty_id: str
+    max_hours_limit: Optional[int] = 16
+
+class FacultyRow(BaseModel):
+    faculty_id: str
+    name: str
+    department: Optional[str] = ""
+
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Helper function to clean up Pandas DataFrames parsed from Excel."""
     df = df.dropna(how='all')
-    
-    # Strip whitespace, lowercase, and replace spaces with underscores for headers
     df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(' ', '_')
-    
-    # Alias Mapping Dictionary for extreme resilience
     alias_map = {
         'facultyid': 'faculty_id',
         'id': 'faculty_id',
@@ -546,10 +565,8 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         'incharge': 'incharge_hours'
     }
     df = df.rename(columns=alias_map)
-    
     for col in df.select_dtypes(include=['object']):
         df[col] = df[col].astype(str).str.strip()
-        
     df = df.where(pd.notnull(df), None)
     return df
 
@@ -573,62 +590,89 @@ async def upload_metadata(
 
         def process_df(df, hint=None):
             cols = list(df.columns)
+            
             if 'course_code' in cols or hint == 'syllabus':
-                db.query(Syllabus).delete()
-                # Drop rows where course_code is missing
                 df = df.dropna(subset=['course_code']) if 'course_code' in df.columns else df
-                for _, row in df.iterrows():
-                    if row.get('course_code'):
-                        db.add(Syllabus(
-                            course_code=str(row.get('course_code')),
-                            course_title=str(row.get('course_title', '')),
-                            course_type=str(row.get('course_type', '')),
-                            category=str(row.get('category', ''))
-                        ))
+                for idx, row_series in df.iterrows():
+                    row = row_series.to_dict()
+                    try:
+                        valid_data = SyllabusRow(**row)
+                    except ValidationError as ve:
+                        field = ve.errors()[0]['loc'][0]
+                        msg = ve.errors()[0]['msg']
+                        raise ValueError(f"Validation failed on Syllabus sheet at Row {idx + 2}, Column '{field}': {msg}")
+                        
+                    existing = db.query(Syllabus).filter_by(course_code=valid_data.course_code).first()
+                    if existing:
+                        existing.course_title = valid_data.course_title
+                        existing.course_type = valid_data.course_type
+                        existing.category = valid_data.category
+                    else:
+                        db.add(Syllabus(**valid_data.dict()))
+                        
             elif 'room_number' in cols or hint == 'rooms':
-                db.query(Room).delete()
                 df = df.dropna(subset=['room_number']) if 'room_number' in df.columns else df
-                for _, row in df.iterrows():
-                    if row.get('room_number'):
-                        capacity = row.get('capacity', 0)
-                        db.add(Room(
-                            room_number=str(row.get('room_number')),
-                            room_type=str(row.get('room_type', '')),
-                            capacity=int(capacity) if pd.notnull(capacity) else 0
-                        ))
+                for idx, row_series in df.iterrows():
+                    row = row_series.to_dict()
+                    try:
+                        valid_data = RoomRow(**row)
+                    except ValidationError as ve:
+                        field = ve.errors()[0]['loc'][0]
+                        msg = ve.errors()[0]['msg']
+                        raise ValueError(f"Validation failed on Rooms sheet at Row {idx + 2}, Column '{field}': {msg}")
+                        
+                    existing = db.query(Room).filter_by(room_number=valid_data.room_number).first()
+                    if existing:
+                        existing.room_type = valid_data.room_type
+                        existing.capacity = valid_data.capacity
+                    else:
+                        db.add(Room(**valid_data.dict()))
+                        
             elif 'max_hours_limit' in cols or hint == 'total_hours':
-                db.query(WorkloadConfiguration).delete()
                 df = df.dropna(subset=['faculty_id']) if 'faculty_id' in df.columns else df
-                for _, row in df.iterrows():
-                    if row.get('faculty_id'):
-                        max_limit = row.get('max_hours_limit', 16)
-                        db.add(WorkloadConfiguration(
-                            faculty_id=str(row.get('faculty_id')),
-                            max_hours_limit=int(max_limit) if pd.notnull(max_limit) else 16
-                        ))
+                for idx, row_series in df.iterrows():
+                    row = row_series.to_dict()
+                    try:
+                        valid_data = WorkloadConfigRow(**row)
+                    except ValidationError as ve:
+                        field = ve.errors()[0]['loc'][0]
+                        msg = ve.errors()[0]['msg']
+                        raise ValueError(f"Validation failed on Total Hours sheet at Row {idx + 2}, Column '{field}': {msg}")
+                        
+                    existing = db.query(WorkloadConfiguration).filter_by(faculty_id=valid_data.faculty_id).first()
+                    if existing:
+                        existing.max_hours_limit = valid_data.max_hours_limit
+                    else:
+                        db.add(WorkloadConfiguration(**valid_data.dict()))
+                        
             elif 'name' in cols and 'faculty_id' in cols or hint == 'faculty':
-                db.query(Faculty).delete()
                 df = df.dropna(subset=['faculty_id']) if 'faculty_id' in df.columns else df
-                
                 faculty_list = []
-                for _, row in df.iterrows():
-                    f_id = row.get('faculty_id')
-                    if f_id:
-                        fac = Faculty(
-                            id=str(f_id),
-                            name=str(row.get('name', '')),
-                            department=str(row.get('department', ''))
-                        )
-                        db.add(fac)
-                        faculty_list.append({
-                            "faculty_id": str(f_id),
-                            "name": str(row.get('name', '')),
-                            "department": str(row.get('department', '')),
-                            "theory_hours": 0,
-                            "lab_hours": 0,
-                            "incharge_hours": 0,
-                            "max_hours_limit": 16
-                        })
+                for idx, row_series in df.iterrows():
+                    row = row_series.to_dict()
+                    try:
+                        valid_data = FacultyRow(**row)
+                    except ValidationError as ve:
+                        field = ve.errors()[0]['loc'][0]
+                        msg = ve.errors()[0]['msg']
+                        raise ValueError(f"Validation failed on Faculty sheet at Row {idx + 2}, Column '{field}': {msg}")
+                        
+                    existing = db.query(Faculty).filter_by(id=valid_data.faculty_id).first()
+                    if existing:
+                        existing.name = valid_data.name
+                        existing.department = valid_data.department
+                    else:
+                        db.add(Faculty(id=valid_data.faculty_id, name=valid_data.name, department=valid_data.department))
+                        
+                    faculty_list.append({
+                        "faculty_id": valid_data.faculty_id,
+                        "name": valid_data.name,
+                        "department": valid_data.department,
+                        "theory_hours": 0,
+                        "lab_hours": 0,
+                        "incharge_hours": 0,
+                        "max_hours_limit": 16
+                    })
                 parsed_results["faculty"] = faculty_list
 
         files_to_process = [
@@ -639,13 +683,13 @@ async def upload_metadata(
             (file, type or file_type)
         ]
         
-        for f, hint in files_to_process:
-            if f:
-                process_df(clean_dataframe(pd.read_excel(io.BytesIO(await f.read()))), hint)
+        with db.begin_nested():
+            for f, hint in files_to_process:
+                if f:
+                    process_df(clean_dataframe(pd.read_excel(io.BytesIO(await f.read()))), hint)
 
         db.commit()
 
-        # Update returned max_hours_limit from the newly inserted WorkloadConfigurations
         if "faculty" in parsed_results:
             limits = {w.faculty_id: w.max_hours_limit for w in db.query(WorkloadConfiguration).all()}
             for f in parsed_results["faculty"]:
@@ -657,6 +701,10 @@ async def upload_metadata(
             **parsed_results
         }
 
+    except ValueError as ve:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Failed to process files: {str(e)}")
+
