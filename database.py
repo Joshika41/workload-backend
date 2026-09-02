@@ -143,4 +143,20 @@ class CohortSyllabusMapping(Base):
     cohort_id = Column(String, ForeignKey("cohorts.id"), nullable=False)
     subject_code = Column(String, ForeignKey("syllabus.subject_code"), nullable=False)
 
+
+class PreferenceConstraint(Base):
+    __tablename__ = "preference_constraints"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    program_type = Column(Enum(ProgramTypeEnum), nullable=False)
+    semester_type = Column(Enum(SemesterTypeEnum), nullable=False)
+    subject_category = Column(String, nullable=False)
+    max_allowed = Column(Integer, nullable=False)
+
+class SubjectPreference(Base):
+    __tablename__ = "subject_preferences"
+    preference_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    faculty_id = Column(String, ForeignKey("faculty.faculty_id"), nullable=False)
+    subject_code = Column(String, ForeignKey("syllabus.subject_code"), nullable=False)
+    status = Column(String, default="PENDING")
+
 Base.metadata.create_all(bind=engine)
