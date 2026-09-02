@@ -69,12 +69,18 @@ class Room(Base):
 
 class Syllabus(Base):
     __tablename__ = "syllabus"
-    course_code = Column(String, primary_key=True, index=True)
+    subject_code = Column(String, primary_key=True, index=True)
     course_title = Column(String, nullable=False)
     course_type = Column(String, nullable=False) # 'Theory' or 'Practical'
+    subject_category = Column(String, nullable=True) # C, D, E, M, S, A, V
+    theory_hours_l = Column(Integer, default=0)
+    practical_hours_p = Column(Integer, default=0)
+    credits_c = Column(Integer, default=0)
     program_type = Column(Enum(ProgramTypeEnum), nullable=True)
     semester_type = Column(Enum(SemesterTypeEnum), nullable=True)
     category = Column(String, nullable=False) # 'UG' or 'PG'
+    batch_sync_id = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
 
 class WorkloadConfiguration(Base):
     __tablename__ = "workload_configurations"
@@ -119,5 +125,22 @@ class GenerationTask(Base):
     status = Column(String, default="PENDING")
     result_payload = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Cohort(Base):
+    __tablename__ = "cohorts"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    department = Column(String, nullable=False)
+    academic_year = Column(Integer, nullable=False)
+    class_name = Column(String, nullable=False)
+    section = Column(String, nullable=False)
+    program_type = Column(Enum(ProgramTypeEnum), nullable=True)
+    semester_type = Column(Enum(SemesterTypeEnum), nullable=True)
+
+class CohortSyllabusMapping(Base):
+    __tablename__ = "cohort_syllabus_mapping"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cohort_id = Column(String, ForeignKey("cohorts.id"), nullable=False)
+    subject_code = Column(String, ForeignKey("syllabus.subject_code"), nullable=False)
 
 Base.metadata.create_all(bind=engine)

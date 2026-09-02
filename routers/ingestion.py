@@ -1,5 +1,12 @@
 from fastapi import APIRouter, File, UploadFile, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from database import Syllabus, Cohort, CohortSyllabusMapping, ProgramTypeEnum, SemesterTypeEnum
+from pydantic import BaseModel
+import uuid
+from typing import Optional
+from fastapi import Form
+
 import pandas as pd
 
 import smtplib
@@ -264,6 +271,152 @@ async def upload_faculty_onboarding(file: UploadFile = File(...), db: Session = 
 
         return {"message": f"Successfully onboarded new faculty entries.", "emails_dispatched": len(emails_to_dispatch)}
         
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/api/admin/upload-syllabus")
+async def upload_syllabus_phase2(
+    file: UploadFile = File(...), 
+    program_type: str = Form(...),
+    semester_type: str = Form(...),
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(verify_admin_role)
+):
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+        
+        batch_sync_id = uuid.uuid4().hex
+        prog = ProgramTypeEnum(program_type.upper())
+        sem = SemesterTypeEnum(semester_type.upper())
+        
+        # Columns mapped to the new schema
+        # We need to map subject_code, course_title, course_type, subject_category, theory_hours_l, practical_hours_p, credits_c
+        code_col = next((c for c in df.columns if 'code' in c.lower()), None)
+        title_col = next((c for c in df.columns if 'title' in c.lower() or 'name' in c.lower()), None)
+        type_col = next((c for c in df.columns if 'type' in c.lower()), None)
+        cat_col = next((c for c in df.columns if 'category' in c.lower()), None)
+        th_col = next((c for c in df.columns if 'theory' in c.lower() or ' l' in c.lower() or c.strip() == 'L'), None)
+        pr_col = next((c for c in df.columns if 'practical' in c.lower() or ' p' in c.lower() or c.strip() == 'P'), None)
+        cr_col = next((c for c in df.columns if 'credit' in c.lower() or ' c' in c.lower() or c.strip() == 'C'), None)
+
+        if not code_col:
+            raise HTTPException(status_code=400, detail="Could not find Subject Code column.")
+
+        upserted = 0
+        with db.begin_nested():
+            for _, row in df.iterrows():
+                sub_code = str(row.get(code_col)).strip()
+                if pd.isna(row.get(code_col)) or not sub_code:
+                    continue
+                
+                title = str(row.get(title_col)).strip() if title_col and pd.notna(row.get(title_col)) else ""
+                c_type = str(row.get(type_col)).strip() if type_col and pd.notna(row.get(type_col)) else "Theory"
+                category = str(row.get(cat_col)).strip() if cat_col and pd.notna(row.get(cat_col)) else "C"
+                
+                try: th_hrs = int(row.get(th_col)) if th_col and pd.notna(row.get(th_col)) else 0
+                except: th_hrs = 0
+                try: pr_hrs = int(row.get(pr_col)) if pr_col and pd.notna(row.get(pr_col)) else 0
+                except: pr_hrs = 0
+                try: cr = int(row.get(cr_col)) if cr_col and pd.notna(row.get(cr_col)) else 0
+                except: cr = 0
+
+                existing = db.query(Syllabus).filter_by(subject_code=sub_code).with_for_update().first()
+                if existing:
+                    existing.course_title = title
+                    existing.course_type = c_type
+                    existing.subject_category = category
+                    existing.theory_hours_l = th_hrs
+                    existing.practical_hours_p = pr_hrs
+                    existing.credits_c = cr
+                    existing.program_type = prog
+                    existing.semester_type = sem
+                    existing.batch_sync_id = batch_sync_id
+                    existing.is_active = True
+                else:
+                    new_sub = Syllabus(
+                        subject_code=sub_code,
+                        course_title=title,
+                        course_type=c_type,
+                        subject_category=category,
+                        theory_hours_l=th_hrs,
+                        practical_hours_p=pr_hrs,
+                        credits_c=cr,
+                        program_type=prog,
+                        semester_type=sem,
+                        category="UG" if prog == ProgramTypeEnum.UG else "PG",
+                        batch_sync_id=batch_sync_id,
+                        is_active=True
+                    )
+                    db.add(new_sub)
+                upserted += 1
+
+            # Soft Delete logic scoped to workspace
+            soft_deleted = db.query(Syllabus).filter(
+                Syllabus.program_type == prog,
+                Syllabus.semester_type == sem,
+                (Syllabus.batch_sync_id != batch_sync_id) | (Syllabus.batch_sync_id == None)
+            ).update({"is_active": False}, synchronize_session=False)
+
+        db.commit()
+        return {"message": "Syllabus synced successfully", "upserted": upserted, "soft_deleted": soft_deleted}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/api/admin/upload-cohorts")
+async def upload_cohorts(
+    file: UploadFile = File(...), 
+    program_type: str = Form(...),
+    semester_type: str = Form(...),
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(verify_admin_role)
+):
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+        
+        prog = ProgramTypeEnum(program_type.upper())
+        sem = SemesterTypeEnum(semester_type.upper())
+
+        dept_col = next((c for c in df.columns if 'department' in c.lower() or 'dept' in c.lower()), None)
+        year_col = next((c for c in df.columns if 'year' in c.lower()), None)
+        class_col = next((c for c in df.columns if 'class' in c.lower() or 'name' in c.lower()), None)
+        sec_col = next((c for c in df.columns if 'section' in c.lower() or 'sec' in c.lower()), None)
+
+        if not class_col:
+            raise HTTPException(status_code=400, detail="Could not find Class Name column.")
+
+        inserted = 0
+        with db.begin_nested():
+            for _, row in df.iterrows():
+                class_name = str(row.get(class_col)).strip()
+                if pd.isna(row.get(class_col)) or not class_name:
+                    continue
+                
+                dept = str(row.get(dept_col)).strip() if dept_col and pd.notna(row.get(dept_col)) else "Unknown"
+                sec = str(row.get(sec_col)).strip() if sec_col and pd.notna(row.get(sec_col)) else "A"
+                try: year = int(row.get(year_col)) if year_col and pd.notna(row.get(year_col)) else 1
+                except: year = 1
+
+                # Just insert the cohort
+                cohort = Cohort(
+                    department=dept,
+                    academic_year=year,
+                    class_name=class_name,
+                    section=sec,
+                    program_type=prog,
+                    semester_type=sem
+                )
+                db.add(cohort)
+                inserted += 1
+                
+        db.commit()
+        return {"message": "Cohorts generated successfully", "inserted": inserted}
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
