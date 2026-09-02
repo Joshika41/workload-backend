@@ -29,6 +29,10 @@ class Department(Base):
     has_labs = Column(Boolean, default=True)
 
 
+
+class RoleTypeEnum(str, enum.Enum):
+    MAIN = "Main"
+    IN2 = "IN-2"
 class ProgramTypeEnum(str, enum.Enum):
     UG = "UG"
     PG = "PG"
@@ -158,5 +162,16 @@ class SubjectPreference(Base):
     faculty_id = Column(String, ForeignKey("faculty.faculty_id"), nullable=False)
     subject_code = Column(String, ForeignKey("syllabus.subject_code"), nullable=False)
     status = Column(String, default="PENDING")
+
+
+class WorkloadAllocation(Base):
+    __tablename__ = "workload_allocations"
+    allocation_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    faculty_id = Column(String, ForeignKey("faculty.faculty_id"), nullable=False)
+    subject_code = Column(String, ForeignKey("syllabus.subject_code"), nullable=False)
+    cohort_id = Column(String, ForeignKey("cohorts.id"), nullable=False)
+    role_type = Column(Enum(RoleTypeEnum), nullable=False)
+    allocated_theory_hours = Column(Integer, default=0)
+    allocated_lab_hours = Column(Integer, default=0)
 
 Base.metadata.create_all(bind=engine)
