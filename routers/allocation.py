@@ -74,8 +74,8 @@ def assign_allocation(
 ):
     try:
         with db.begin_nested():
-            # Get syllabus limits
-            syllabus = db.query(Syllabus).filter_by(subject_code=payload.subject_code).first()
+            # Get syllabus limits with row-level lock for concurrency safety
+            syllabus = db.query(Syllabus).filter_by(subject_code=payload.subject_code).with_for_update().first()
             if not syllabus:
                 raise HTTPException(status_code=400, detail="Subject not found.")
                 
@@ -229,7 +229,7 @@ def export_workload(
         data.extend(group["rows"])
         data.append(['Total', '', '', str(group["total_theory"]), str(group["total_lab"])])
         
-        t = Table(data, style=[
+        t = Table(data, repeatRows=1, style=[
             ('BACKGROUND', (0,0), (-1,0), colors.grey),
             ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
