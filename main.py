@@ -31,6 +31,36 @@ from routers.export import router as export_router
 
 app = FastAPI(title="University Timetable Admin API")
 
+
+# --- Dependencies ---
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+
 from database import Department
 from pydantic import BaseModel
 
@@ -78,6 +108,7 @@ def clean_zombie_tasks():
         db.close()
 
 
+
 models.Base.metadata.create_all(bind=engine)
 app.include_router(ingestion_router)
 app.include_router(generation_router)
@@ -92,19 +123,12 @@ app.include_router(export_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins, adjust in production if necessary
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
 )
 
 # Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 # --- Pydantic Models ---
 
 class FacultyListResponse(BaseModel):
@@ -150,24 +174,6 @@ class EditBlockRequest(BaseModel):
 # --- Auth Dependencies ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except Exception:
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
-        raise credentials_exception
-    return user
 
 # --- Routes ---
 

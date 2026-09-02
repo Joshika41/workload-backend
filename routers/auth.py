@@ -41,12 +41,6 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     return encoded_jwt
 
 
-def verify_admin_role(current_user: models.User = Depends(get_current_user)):
-    role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
-    if role not in ["ADMIN", "MASTER_ADMIN"]:
-        raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
-    return current_user
-
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -69,6 +63,12 @@ from pydantic import BaseModel
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+def verify_admin_role(current_user: models.User = Depends(get_current_user)):
+    role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    if role not in ["ADMIN", "MASTER_ADMIN"]:
+        raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
+    return current_user
 
 @router.post("/api/auth/login")
 def login(request: LoginRequest, db: Session = Depends(get_db)):
