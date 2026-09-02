@@ -28,6 +28,15 @@ class Department(Base):
     name = Column(String, primary_key=True, index=True)
     has_labs = Column(Boolean, default=True)
 
+
+class ProgramTypeEnum(str, enum.Enum):
+    UG = "UG"
+    PG = "PG"
+
+class SemesterTypeEnum(str, enum.Enum):
+    ODD = "ODD"
+    EVEN = "EVEN"
+
 class RoleEnum(str, enum.Enum):
     ADMIN = "ADMIN"
     FACULTY = "FACULTY"
@@ -39,15 +48,18 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(Enum(RoleEnum), default=RoleEnum.FACULTY, nullable=False)
-    faculty_id = Column(String, ForeignKey("faculty.id"), nullable=True)
+    faculty_id = Column(String, ForeignKey("faculty.faculty_id"), nullable=True)
 
     faculty_rel = relationship("Faculty")
 
 class Faculty(Base):
     __tablename__ = "faculty"
-    id = Column(String, primary_key=True, index=True) # Faculty ID
+    faculty_id = Column(String, primary_key=True, index=True) # Faculty ID
     name = Column(String, nullable=False)
     department = Column(String, nullable=False)
+    designation = Column(String, nullable=True)
+    official_email = Column(String, nullable=True)
+    is_quarantined = Column(Boolean, default=False)
 
 class Room(Base):
     __tablename__ = "rooms"
@@ -60,25 +72,29 @@ class Syllabus(Base):
     course_code = Column(String, primary_key=True, index=True)
     course_title = Column(String, nullable=False)
     course_type = Column(String, nullable=False) # 'Theory' or 'Practical'
+    program_type = Column(Enum(ProgramTypeEnum), nullable=True)
+    semester_type = Column(Enum(SemesterTypeEnum), nullable=True)
     category = Column(String, nullable=False) # 'UG' or 'PG'
 
 class WorkloadConfiguration(Base):
     __tablename__ = "workload_configurations"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    faculty_id = Column(String, ForeignKey("faculty.id"), unique=True)
+    faculty_id = Column(String, ForeignKey("faculty.faculty_id"), unique=True)
     theory_hours = Column(Integer, default=0) # Dropdown: 1, 2, 4
     lab_hours = Column(Integer, default=0)
     incharge_hours = Column(Integer, default=0) # 2 hours if assistant/incharge
     max_hours_limit = Column(Integer, default=16) # From total hours file
     total_calculated_hours = Column(Integer, default=0)
     is_overloaded = Column(Boolean, default=False)
+    program_type = Column(Enum(ProgramTypeEnum), nullable=True)
+    semester_type = Column(Enum(SemesterTypeEnum), nullable=True)
 
     faculty_rel = relationship("Faculty")
 
 class FacultyPreference(Base):
     __tablename__ = "faculty_preferences"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    faculty_id = Column(String, ForeignKey("faculty.id"), nullable=False)
+    faculty_id = Column(String, ForeignKey("faculty.faculty_id"), nullable=False)
     subject_name = Column(String, nullable=False)
     status = Column(String, default="PENDING")
 
@@ -87,11 +103,13 @@ class FacultyPreference(Base):
 class TimetableBlock(Base):
     __tablename__ = "timetable_blocks"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    faculty_id = Column(String, ForeignKey("faculty.id"), nullable=False)
+    faculty_id = Column(String, ForeignKey("faculty.faculty_id"), nullable=False)
     section = Column(String, nullable=False)
     subject = Column(String, nullable=False)
     day = Column(Integer, nullable=False)
     period = Column(Integer, nullable=False)
+    program_type = Column(Enum(ProgramTypeEnum), nullable=True)
+    semester_type = Column(Enum(SemesterTypeEnum), nullable=True)
 
 # Create the tables automatically in SQLite
 
